@@ -28,9 +28,13 @@ type Entry struct {
 func NewLPMTable(arch string) LPMTable {
 	switch arch {
 	case ArchRadix:
-		return &RadixTable{}
+		return &RadixTable{
+			root: &radixNode{},
+		}
 	default:
-		return &RadixTable{}
+		return &RadixTable{
+			root: &radixNode{},
+		}
 	}
 }
 
