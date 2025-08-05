@@ -1,4 +1,4 @@
-module github.com/go-lpm/go-lpm
+module github.com/go-lpm/golpm
 
 go 1.19
 
