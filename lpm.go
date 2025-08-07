@@ -9,7 +9,7 @@ const (
 )
 
 type LPMTable interface {
-	Show() [][]Entry
+	Show() map[int][]Entry
 	Add(prefix string, entry interface{}) error
 	AddIPNet(prefix *net.IPNet, entry interface{}) error
 	Delete(prefix string) error
@@ -25,20 +25,26 @@ type Entry struct {
 }
 
 // NewLPMTable Create a lpm table based on specify arch.
-func NewLPMTable(arch string) LPMTable {
+func NewLPMTable(arch string, isIPv6 bool) LPMTable {
+	ipBytesLen := net.IPv4len
+	if isIPv6 {
+		ipBytesLen = net.IPv6len
+	}
 	switch arch {
 	case ArchRadix:
 		return &RadixTable{
-			root: &radixNode{},
+			ipBytesLen: ipBytesLen,
+			root:       &radixNode{},
 		}
 	default:
 		return &RadixTable{
-			root: &radixNode{},
+			ipBytesLen: ipBytesLen,
+			root:       &radixNode{},
 		}
 	}
 }
 
 // NewRadixLPMTable Create a lpm table based on radix arch.
-func NewRadixLPMTable() LPMTable {
-	return NewLPMTable(ArchRadix)
+func NewRadixLPMTable(isIPv6 bool) LPMTable {
+	return NewLPMTable(ArchRadix, isIPv6)
 }

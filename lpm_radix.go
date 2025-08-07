@@ -1,6 +1,7 @@
 package golpm
 
 import (
+	"errors"
 	"math"
 	"net"
 )
@@ -8,6 +9,7 @@ import (
 type RadixTable struct {
 	root         *radixNode
 	defaultEntry *Entry
+	ipBytesLen   int
 }
 
 type radixNode struct {
@@ -15,7 +17,7 @@ type radixNode struct {
 	entries  [8]*Entry // routing entries stored by the node
 }
 
-func traverse(deep int, node *radixNode, entries [][]Entry) {
+func traverse(deep int, node *radixNode, entries map[int][]Entry) {
 	if node == nil {
 		return
 	}
@@ -31,9 +33,10 @@ func traverse(deep int, node *radixNode, entries [][]Entry) {
 	}
 }
 
-func (rt *RadixTable) Show() [][]Entry {
-	var entries [][]Entry
-	entries = make([][]Entry, 33)
+// Show Return the lpm table in format: maskLen -> entry list
+func (rt *RadixTable) Show() map[int][]Entry {
+	var entries map[int][]Entry
+	entries = make(map[int][]Entry)
 	for _, node := range rt.root.children {
 		traverse(0, node, entries)
 	}
@@ -52,6 +55,12 @@ func (rt *RadixTable) Add(prefix string, entry interface{}) error {
 }
 
 func (rt *RadixTable) AddIPNet(prefix *net.IPNet, entry interface{}) error {
+	if rt.ipBytesLen == net.IPv4len && prefix.IP.To4() == nil {
+		return errors.New("add ipv6 entry to ipv4 table")
+	} else if rt.ipBytesLen == net.IPv6len && prefix.IP.To4() != nil {
+		return errors.New("add ipv4 entry to ipv6 table")
+	}
+
 	maskSize, _ := prefix.Mask.Size()
 	if maskSize == 0 {
 		rt.defaultEntry = &Entry{
@@ -94,6 +103,12 @@ func (rt *RadixTable) Delete(prefix string) error {
 }
 
 func (rt *RadixTable) DeleteIPNet(prefix *net.IPNet) error {
+	if rt.ipBytesLen == net.IPv4len && prefix.IP.To4() == nil {
+		return errors.New("delete ipv6 entry to ipv4 table")
+	} else if rt.ipBytesLen == net.IPv6len && prefix.IP.To4() != nil {
+		return errors.New("delete ipv4 entry to ipv6 table")
+	}
+
 	maskSize, _ := prefix.Mask.Size()
 	if maskSize == 0 {
 		rt.defaultEntry = nil
@@ -153,13 +168,15 @@ func (rt *RadixTable) Lookup(ip string) *Entry {
 }
 
 func (rt *RadixTable) LookupIP(ip net.IP) *Entry {
-	// 转换为IPv4地址
-	ip4 := ip.To4()
-	if ip4 == nil {
-		return nil // 仅处理IPv4
+	if rt.ipBytesLen == net.IPv4len && ip.To4() == nil ||
+		rt.ipBytesLen == net.IPv6len && ip.To4() != nil {
+		return nil
 	}
 
-	ipBytes := []byte(ip4)
+	ipBytes := []byte(ip)
+	if rt.ipBytesLen == net.IPv4len {
+		ipBytes = ip.To4()
+	}
 	var nodes []*radixNode // nodes that may hit route
 	var curNode *radixNode
 
