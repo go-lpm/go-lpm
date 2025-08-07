@@ -13,6 +13,8 @@ type RadixTable struct {
 }
 
 type radixNode struct {
+	childCnt int
+	entryCnt int
 	children [256]*radixNode
 	entries  [8]*Entry // routing entries stored by the node
 }
@@ -82,12 +84,17 @@ func (rt *RadixTable) AddIPNet(prefix *net.IPNet, entry interface{}) error {
 	for i := 0; i < byteCount; i++ {
 		curByte = ipBytes[i]
 		if curNode.children[curByte] == nil {
+			curNode.childCnt++
 			curNode.children[curByte] = &radixNode{}
 		}
 		curNode = curNode.children[curByte]
 	}
 	// save entry in end point
-	curNode.entries[(maskSize+7)%8] = &Entry{
+	entryIdx := (maskSize + 7) % 8
+	if curNode.entries[entryIdx] == nil {
+		curNode.entryCnt++
+	}
+	curNode.entries[entryIdx] = &Entry{
 		Prefix: prefix,
 		Entry:  entry,
 	}
@@ -115,6 +122,7 @@ func (rt *RadixTable) DeleteIPNet(prefix *net.IPNet) error {
 		return nil
 	}
 
+	var nodePath []*radixNode
 	var curNode *radixNode
 	var curByte byte
 
@@ -125,6 +133,7 @@ func (rt *RadixTable) DeleteIPNet(prefix *net.IPNet) error {
 
 	// find corresponding node byte-by-byte
 	for i := 0; i < byteCount; i++ {
+		nodePath = append(nodePath, curNode)
 		curByte = ipBytes[i]
 		if curNode.children[curByte] == nil {
 			return nil
@@ -132,7 +141,22 @@ func (rt *RadixTable) DeleteIPNet(prefix *net.IPNet) error {
 		curNode = curNode.children[curByte]
 	}
 	// delete entry from end point
-	curNode.entries[(maskSize+7)%8] = nil
+	entryIdx := (maskSize + 7) % 8
+	if curNode.entries[entryIdx] != nil {
+		curNode.entryCnt--
+		curNode.entries[entryIdx] = nil
+	}
+	// free the node memory when appropriate
+	if curNode.entryCnt != 0 {
+		return nil
+	}
+	for i := byteCount - 1; i >= 0; i-- {
+		curByte = ipBytes[i]
+		if nodePath[i].children[curByte].childCnt == 0 && nodePath[i].children[curByte].entryCnt == 0 {
+			nodePath[i].children[curByte] = nil
+			nodePath[i].childCnt--
+		}
+	}
 	return nil
 }
 
